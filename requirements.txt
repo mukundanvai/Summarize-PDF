@@ -1,0 +1,7 @@
+crewai==0.30.11
+PyPDF2==3.0.1
+langchain-openai==0.0.5
+langchain-text-splitters==0.0.2
+tiktoken==0.5.2
+python-dotenv==1.0.1
+streamlit==1.35.0

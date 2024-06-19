@@ -1,0 +1,1 @@
+A Streamlit app to summarize a document using crewai agents
