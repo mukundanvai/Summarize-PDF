@@ -8,7 +8,7 @@ load_dotenv()
 
 llm = ChatOpenAI(
     model="gpt-3.5-turbo",
-    temperature=0,
+    temperature=0.4,
     max_tokens=None,
     timeout=None,
     max_retries=2,
@@ -31,11 +31,8 @@ class SummarizationCrew():
       )
     summary_task = Task(
       agent=summary_agent,
-      description=f'Summarize only the {text} given, make sure to include the most relevant information given in the text in the summary, return only the summary nothing else.\
-      DO NOT make up information. DO NOT repeat information. Ensure you summarize the quotes and do not report anything verbatim.\
-      Do not report any information not present in the {text}. Dates and locations mentioned in the {text} are important, do include it in the report.\
-      Do not mention if something is not present in the text. Ensure you are gramatically correct\n\nCONTENT\n----------\n{text}',
-      expected_output= "Final summary of the text should include only the contents provided in the text"
+      description=f'Summarize the {text} clearly including every single information given. Paraphrase quotes, if any. Ensure the result is under 500 words.',
+      expected_output= "Final summary of the text should include only the contents provided in the text and should be UNDER 500 WORDS"
       )
     
     verify_agent = Agent(
@@ -64,42 +61,57 @@ class SummarizationCrew():
     return summary
 
   def run(self):
+    # split the original text so that the summary will be on these individual chunks instead of the whole text  
     text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=round(len(self.text)/2),
-    chunk_overlap=0,
+    chunk_size=round(len(self.text)/3),
+    chunk_overlap=round((0.3)*len(self.text)/3),
     )
     text_list = text_splitter.split_text(self.text)
+    
+    # saving the original text 
     text = self.text
 
+    # encoding
     encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    
+    # initialize final_output to an empty list so that each summary is appended later
     final_output = []
-    i, n = (0, 0)
+    
+    # using i to check if its the original text or the summary appended text
+    # using n to check the text_list index number
+    (i, n) = (0, 0)
+    
+    # creating a new text_splitter for the appended summary texts
     text_splitter = RecursiveCharacterTextSplitter(
         separators=' ',
         chunk_size=5000,
         chunk_overlap=500,
         length_function=len,
           )
+    
+    
     while n < len(text_list):
-      if len(encoding.encode(text_list[n])) <= 5000 and i==0:
+      if len(encoding.encode(text=text)) <= 5000:                             # checking if the original text has less than 5000 tokens
+        final_output.append(SummarizationCrew.agents_tasks(text=text))
+        if n==0 and i==0:                                                     # if the original text has less than 5000 tokens then break from the loop
+          break
+        n += 1
+        i = 0
+        text = self.text
+      elif len(encoding.encode(text_list[n])) <= 5000 and i==0:               # check if the first chunk of the text_list has less than 5000 tokens
         final_output.append(SummarizationCrew.agents_tasks(text=text_list[n]))
         n += 1
         i = 0
-      elif len(encoding.encode(text=text)) <= 5000:
-        final_output.append(SummarizationCrew.agents_tasks(text=text))
-        n += 1
-        i = 0
       else:
-        if i == 0:
-          chunks = text_splitter.split_text(text=text_list[n])
+        if i == 0:                                                            # check if the text to be passed should be the nth chunk from text_list\
+          chunks = text_splitter.split_text(text=text_list[n])                # or the appended text
         else:
-          chunks = text_splitter.split_text(text=text) 
+          chunks = text_splitter.split_text(text=text)                        # split the chunks according to what text is passed
         summaries = []
         for chunk in chunks:
-          summary = SummarizationCrew.agents_tasks(text=chunk)
+          summary = SummarizationCrew.agents_tasks(text=chunk)                # call the summary agent to each chunk
           summaries.append(summary)
         text = " ".join(summaries)
-        i = 1
-    return "\n\n".join(final_output)
-
+        i = 1                                                                 # initialize i to 1 so that the loop will not use text_list[n] in its code\
+    return "\n\n".join(final_output)                                          # and will use only the appended text to further chunk or summarize 
 
